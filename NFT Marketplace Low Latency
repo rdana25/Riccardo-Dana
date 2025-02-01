@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract NFTMarketplace is Ownable {
+    struct Listing {
+        address seller;
+        uint256 price;
+        bool active;
+    }
+
+    mapping(uint256 => Listing) public listings;
+    ERC721 public nftContract;
+
+    event NFTListed(uint256 indexed tokenId, address seller, uint256 price);
+    event NFTTraded(uint256 indexed tokenId, address buyer, uint256 price);
+
+    constructor(address _nftContract) {
+        nftContract = ERC721(_nftContract);
+    }
+
+    function listNFT(uint256 tokenId, uint256 price) external {
+        require(nftContract.ownerOf(tokenId) == msg.sender, "Not the NFT owner");
+        require(nftContract.getApproved(tokenId) == address(this), "Contract not approved");
+        
+        listings[tokenId] = Listing(msg.sender, price, true);
+        emit NFTListed(tokenId, msg.sender, price);
+    }
+
+    function tradeNFT(uint256 tokenId) external payable {
+        Listing memory listing = listings[tokenId];
+        require(listing.active, "NFT not listed");
+        require(msg.value >= listing.price, "Insufficient payment");
+
+        payable(listing.seller).transfer(msg.value);
+        nftContract.safeTransferFrom(listing.seller, msg.sender, tokenId);
+        listings[tokenId].active = false;
+        
+        emit NFTTraded(tokenId, msg.sender, listing.price);
+    }
+}
